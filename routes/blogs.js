@@ -44,34 +44,23 @@ router.post("/add", upload.single("image"), async (req, res) => {
     let imageUrl = "";
 
     if (req.file) {
-      // Upload to Cloudinary
-      const result = await cloudinary.uploader.upload_stream(
-        { folder: "blogs" }, // optional folder
-        async (error, result) => {
-          if (error) return res.status(500).send("Image upload failed");
-          imageUrl = result.secure_url;
+      // Upload file from path to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "blogs",
+      });
+      imageUrl = result.secure_url;
 
-          // Save blog in DB
-          const dbResult = await pool.query(
-            `INSERT INTO blogs (title, description, category, image, read_time, author, date)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [title, description, category, imageUrl, readTime, author, date || new Date()]
-          );
-
-          res.json(dbResult.rows[0]);
-        }
-      );
-
-      // Pipe buffer into upload_stream
-      require("streamifier").createReadStream(req.file.buffer).pipe(result);
-    } else {
-      const dbResult = await pool.query(
-        `INSERT INTO blogs (title, description, category, image, read_time, author, date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [title, description, category, imageUrl, readTime, author, date || new Date()]
-      );
-      res.json(dbResult.rows[0]);
+      // Delete the local file after upload
+      fs.unlinkSync(req.file.path);
     }
+
+    const dbResult = await pool.query(
+      `INSERT INTO blogs (title, description, category, image, read_time, author, date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title, description, category, imageUrl, readTime, author, date || new Date()]
+    );
+
+    res.json(dbResult.rows[0]);
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
