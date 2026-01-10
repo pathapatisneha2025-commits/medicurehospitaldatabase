@@ -113,7 +113,7 @@ router.get("/check", (req, res) => {
 // =========================
 // RESET PASSWORD (NO TOKEN)
 // =========================
-router.post("/rest-password", async (req, res) => {
+router.post("/reset-password", async (req, res) => {
   try {
     const { email, password, confirmPassword } = req.body;
 
