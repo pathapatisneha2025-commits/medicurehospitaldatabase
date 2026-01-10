@@ -110,6 +110,47 @@ router.get("/check", (req, res) => {
   }
   res.json({ loggedIn: false });
 });
+// =========================
+// RESET PASSWORD (NO TOKEN)
+// =========================
+router.post("/rest-password", async (req, res) => {
+  try {
+    const { email, password, confirmPassword } = req.body;
+
+    // Validation
+    if (!email || !password || !confirmPassword) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+
+    // Check if admin exists
+    const adminCheck = await pool.query(
+      "SELECT * FROM admins WHERE email = $1",
+      [email]
+    );
+
+    if (adminCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Admin with this email does not exist" });
+    }
+
+    // Hash new password
+    const hash = await bcrypt.hash(password, 10);
+
+    // Update password in DB
+    await pool.query(
+      "UPDATE admins SET password = $1 WHERE email = $2",
+      [hash, email]
+    );
+
+    res.json({ message: "Password reset successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 
 // =========================
