@@ -1,12 +1,27 @@
 const express = require("express");
-const pool = require("../db"); // PostgreSQL connection
-const cloudinary = require("../cloudinary"); // Cloudinary client
+const pool = require("../db");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const multer = require("multer");
+const path = require("path");
+const cloudinary = require("../cloudinary");
 
 const router = express.Router();
 
-// Multer setup
-const storage = multer.memoryStorage();
+// -----------------------
+// Multer & Cloudinary setup
+// -----------------------
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "blogs",
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+    public_id: (req, file) => {
+      const nameWithoutExt = path.parse(file.originalname).name;
+      return Date.now() + "-" + nameWithoutExt;
+    },
+  },
+});
+
 const upload = multer({ storage });
 
 // -----------------------
@@ -37,22 +52,11 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// CREATE a new blog with image
+// CREATE a new blog
 router.post("/add", upload.single("image"), async (req, res) => {
   try {
     const { title, description, category, readTime, author, date } = req.body;
-    let imageUrl = "";
-
-    if (req.file) {
-      // Upload file from path to Cloudinary
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "blogs",
-      });
-      imageUrl = result.secure_url;
-
-      // Delete the local file after upload
-      fs.unlinkSync(req.file.path);
-    }
+    const imageUrl = req.file ? req.file.path : ""; // CloudinaryStorage sets path automatically
 
     const dbResult = await pool.query(
       `INSERT INTO blogs (title, description, category, image, read_time, author, date)
@@ -67,64 +71,34 @@ router.post("/add", upload.single("image"), async (req, res) => {
   }
 });
 
-// UPDATE a blog with optional image
+// UPDATE a blog
 router.put("/:id", upload.single("image"), async (req, res) => {
   const { id } = req.params;
   try {
     const { title, description, category, readTime, author, date } = req.body;
-    let imageUrl;
 
     const oldBlog = await pool.query("SELECT * FROM blogs WHERE id=$1", [id]);
     if (oldBlog.rows.length === 0) return res.status(404).send("Blog not found");
 
-    if (req.file) {
-      // Upload new image to Cloudinary
-      const result = await cloudinary.uploader.upload_stream(
-        { folder: "blogs" },
-        async (error, result) => {
-          if (error) return res.status(500).send("Image upload failed");
-          imageUrl = result.secure_url;
+    const imageUrl = req.file ? req.file.path : oldBlog.rows[0].image;
 
-          const dbResult = await pool.query(
-            `UPDATE blogs
-             SET title=$1, description=$2, category=$3, image=$4, read_time=$5, author=$6, date=$7
-             WHERE id=$8 RETURNING *`,
-            [
-              title,
-              description,
-              category,
-              imageUrl || oldBlog.rows[0].image,
-              readTime,
-              author,
-              date || oldBlog.rows[0].date,
-              id,
-            ]
-          );
+    const dbResult = await pool.query(
+      `UPDATE blogs
+       SET title=$1, description=$2, category=$3, image=$4, read_time=$5, author=$6, date=$7
+       WHERE id=$8 RETURNING *`,
+      [
+        title,
+        description,
+        category,
+        imageUrl,
+        readTime,
+        author,
+        date || oldBlog.rows[0].date,
+        id,
+      ]
+    );
 
-          res.json(dbResult.rows[0]);
-        }
-      );
-
-      require("streamifier").createReadStream(req.file.buffer).pipe(result);
-    } else {
-      const dbResult = await pool.query(
-        `UPDATE blogs
-         SET title=$1, description=$2, category=$3, image=$4, read_time=$5, author=$6, date=$7
-         WHERE id=$8 RETURNING *`,
-        [
-          title,
-          description,
-          category,
-          oldBlog.rows[0].image,
-          readTime,
-          author,
-          date || oldBlog.rows[0].date,
-          id,
-        ]
-      );
-
-      res.json(dbResult.rows[0]);
-    }
+    res.json(dbResult.rows[0]);
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
