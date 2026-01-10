@@ -56,35 +56,45 @@ router.get("/:id", async (req, res) => {
 router.post("/add", upload.single("image"), async (req, res) => {
   try {
     const { title, description, category, readTime, author, date } = req.body;
-const imageUrl = req.file
-  ? req.file.path?.url || req.file.secure_url || req.file.url
-  : "";
+
+    const imageUrl = req.file ? req.file.path : "";
+
+    const blogDate = date
+      ? date
+      : new Date().toISOString().split("T")[0];
 
     const dbResult = await pool.query(
       `INSERT INTO blogs (title, description, category, image, read_time, author, date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [title, description, category, imageUrl, readTime, author, date || new Date()]
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [title, description, category, imageUrl, readTime, author, blogDate]
     );
 
     res.json(dbResult.rows[0]);
   } catch (err) {
-    console.error(err.message);
+    console.error(err);
     res.status(500).send("Server Error");
   }
 });
 
+
 // UPDATE a blog
-router.put("/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params;
+router.put("/update/:id", upload.single("image"), async (req, res) => {
   try {
+    const { id } = req.params;
     const { title, description, category, readTime, author, date } = req.body;
 
     const oldBlog = await pool.query("SELECT * FROM blogs WHERE id=$1", [id]);
-    if (oldBlog.rows.length === 0) return res.status(404).send("Blog not found");
+    if (oldBlog.rows.length === 0) {
+      return res.status(404).send("Blog not found");
+    }
 
-const imageUrl = req.file
-  ? req.file.path?.url || req.file.secure_url || req.file.url
-  : oldBlog.rows[0].image;
+    const imageUrl = req.file
+      ? req.file.path
+      : oldBlog.rows[0].image;
+
+    const blogDate = date
+      ? date
+      : oldBlog.rows[0].date;
 
     const dbResult = await pool.query(
       `UPDATE blogs
@@ -97,14 +107,14 @@ const imageUrl = req.file
         imageUrl,
         readTime,
         author,
-        date || oldBlog.rows[0].date,
+        blogDate,
         id,
       ]
     );
 
     res.json(dbResult.rows[0]);
   } catch (err) {
-    console.error(err.message);
+    console.error(err);
     res.status(500).send("Server Error");
   }
 });
