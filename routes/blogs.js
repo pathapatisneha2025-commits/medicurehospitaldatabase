@@ -56,7 +56,9 @@ router.get("/:id", async (req, res) => {
 router.post("/add", upload.single("image"), async (req, res) => {
   try {
     const { title, description, category, readTime, author, date } = req.body;
-    const imageUrl = req.file ? req.file.path : ""; // CloudinaryStorage sets path automatically
+const imageUrl = req.file
+  ? req.file.path?.url || req.file.secure_url || req.file.url
+  : "";
 
     const dbResult = await pool.query(
       `INSERT INTO blogs (title, description, category, image, read_time, author, date)
@@ -80,7 +82,9 @@ router.put("/:id", upload.single("image"), async (req, res) => {
     const oldBlog = await pool.query("SELECT * FROM blogs WHERE id=$1", [id]);
     if (oldBlog.rows.length === 0) return res.status(404).send("Blog not found");
 
-    const imageUrl = req.file ? req.file.path : oldBlog.rows[0].image;
+const imageUrl = req.file
+  ? req.file.path?.url || req.file.secure_url || req.file.url
+  : oldBlog.rows[0].image;
 
     const dbResult = await pool.query(
       `UPDATE blogs
